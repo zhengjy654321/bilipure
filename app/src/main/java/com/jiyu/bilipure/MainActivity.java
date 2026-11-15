@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
             try { handleMessage(new JSONObject(message.getData()), reply); }
             catch (Exception e) { showToast("应用请求格式错误"); }
         });
-        try { injection = "(()=>{if(window.top!==window.self||document.getElementById('orange-classroom'))return;\n" + asset("bridge.js") + "\n" + asset("classroom.js") + "\n" + asset("touch-player.js") + "\n})();"; }
+        try { injection = "(()=>{if(window.top!==window.self||document.getElementById('orange-classroom'))return;\n" + asset("bridge.js") + "\n" + asset("goal-core.js") + "\n" + asset("classroom.js") + "\n" + asset("touch-player.js") + "\n})();"; }
         catch(Exception e) { showToast("课堂文件读取失败"); finish(); return; }
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {

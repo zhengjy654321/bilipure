@@ -29,12 +29,14 @@ jobs:
           node --check app/src/main/assets/classroom.js
           node --check app/src/main/assets/bridge.js
           node --check app/src/main/assets/touch-player.js
+          node --check app/src/main/assets/goal-core.js
+          node tests/goal-core.test.cjs
       - name: Build and lint
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
       - name: Prepare APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/bilipure-0.3.0-test.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/bilipure-0.4.0-test.apk
           sha256sum dist/*.apk > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
