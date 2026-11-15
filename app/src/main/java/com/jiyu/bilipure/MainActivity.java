@@ -23,6 +23,11 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Toast;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.JavaScriptReplyProxy;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -70,8 +75,15 @@ public class MainActivity extends Activity {
         layout.addView(toolbar, new LinearLayout.LayoutParams(-1, dp(44)));
         container = new FrameLayout(this);
         layout.addView(container, new LinearLayout.LayoutParams(-1, 0, 1));
-        layout.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        ViewCompat.setOnApplyWindowInsetsListener(layout, (v,insets)->{
+            Insets safe=insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars()|WindowInsetsCompat.Type.displayCutout());
+            Insets keyboard=insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(safe.left,safe.top,safe.right,Math.max(safe.bottom,keyboard.bottom));
+            return WindowInsetsCompat.CONSUMED;
+        });
         setContentView(layout);
+        ViewCompat.requestApplyInsets(layout);
         web = new WebView(this); container.addView(web, new FrameLayout.LayoutParams(-1,-1));
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
@@ -95,7 +107,7 @@ public class MainActivity extends Activity {
             try { handleMessage(new JSONObject(message.getData()), reply); }
             catch (Exception e) { showToast("应用请求格式错误"); }
         });
-        try { injection = "(()=>{if(window.top!==window.self||document.getElementById('orange-classroom'))return;\n" + asset("bridge.js") + "\n" + asset("classroom.js") + "\n})();"; }
+        try { injection = "(()=>{if(window.top!==window.self||document.getElementById('orange-classroom'))return;\n" + asset("bridge.js") + "\n" + asset("classroom.js") + "\n" + asset("touch-player.js") + "\n})();"; }
         catch(Exception e) { showToast("课堂文件读取失败"); finish(); return; }
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -136,7 +148,8 @@ public class MainActivity extends Activity {
             @Override public void onShowCustomView(View view,CustomViewCallback callback) {
                 if(fullscreen!=null){callback.onCustomViewHidden();return;}
                 fullscreen=view;fullscreenCallback=callback;container.addView(view,new FrameLayout.LayoutParams(-1,-1));web.setVisibility(View.GONE);toolbar.setVisibility(View.GONE);
-                getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                WindowInsetsControllerCompat bars=WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView());
+                bars.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);bars.hide(WindowInsetsCompat.Type.systemBars());
             }
             @Override public void onHideCustomView(){exitFullscreen();}
         });
@@ -185,7 +198,7 @@ public class MainActivity extends Activity {
         if(request==PICK_JSON){if(fileCallback!=null){fileCallback.onReceiveValue(result==RESULT_OK&&data!=null?new Uri[]{data.getData()}:null);fileCallback=null;}}
         if(request==EXPORT_JSON){if(result!=RESULT_OK||data==null||data.getData()==null){finishExport("已取消导出");return;}try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new Exception();out.write(exportText.getBytes(StandardCharsets.UTF_8));finishExport(null);}catch(Exception e){finishExport("文件保存失败，请重新导出");}}
     }
-    private void exitFullscreen(){if(fullscreen==null)return;container.removeView(fullscreen);fullscreen=null;web.setVisibility(View.VISIBLE);toolbar.setVisibility(View.VISIBLE);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);if(fullscreenCallback!=null){fullscreenCallback.onCustomViewHidden();fullscreenCallback=null;}}
+    private void exitFullscreen(){if(fullscreen==null)return;container.removeView(fullscreen);fullscreen=null;web.setVisibility(View.VISIBLE);toolbar.setVisibility(View.VISIBLE);WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView()).show(WindowInsetsCompat.Type.systemBars());if(fullscreenCallback!=null){fullscreenCallback.onCustomViewHidden();fullscreenCallback=null;}}
     private void goBack(){if(fullscreen!=null)exitFullscreen();else if(web.canGoBack())web.goBack();else new AlertDialog.Builder(this).setMessage("退出课堂？").setPositiveButton("退出",(d,w)->finish()).setNegativeButton("取消",null).show();}
     @Override public void onBackPressed(){goBack();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(web!=null)web.saveState(out);}
