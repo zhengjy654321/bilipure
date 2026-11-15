@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
         LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL);
         toolbar = new LinearLayout(this); toolbar.setBackgroundColor(Color.rgb(248,249,241));
         addButton("‹ 返回", () -> goBack());
-        addButton("🍊 主页", () -> web.loadUrl(HOME));
+        addButton("🍋 主页", () -> web.loadUrl(HOME));
         addButton("刷新", () -> web.reload());
         addButton("备份进度", () -> exportBackup());
         layout.addView(toolbar, new LinearLayout.LayoutParams(-1, dp(44)));
@@ -192,7 +192,7 @@ public class MainActivity extends Activity {
         reply(proxy,id,new JSONObject().put("status",status).put("responseText",body),null);
     }catch(Exception e){reply(proxy,id,null,"B站目录请求失败，请检查网络或在应用内登录后重试");}finally{if(connection!=null)connection.disconnect();}}
     private void exportBackup(){String value=preferences.getString(KEY,null);if(value==null){showToast("暂时没有进度可备份");return;}if(exportText!=null){showToast("请先完成当前导出");return;}exportText=value;beginExport();}
-    private void beginExport(){try{Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"orange-classroom-progress.json");startActivityForResult(intent,EXPORT_JSON);}catch(Exception e){finishExport("无法打开文件保存器");}}
+    private void beginExport(){try{Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"lemon-classroom-progress.json");startActivityForResult(intent,EXPORT_JSON);}catch(Exception e){finishExport("无法打开文件保存器");}}
     private void finishExport(String error){if(exportReply!=null)reply(exportReply,exportId,error==null,error);else showToast(error==null?"进度已备份":error);exportText=null;exportReply=null;exportId=null;}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
         if(request==PICK_JSON){if(fileCallback!=null){fileCallback.onReceiveValue(result==RESULT_OK&&data!=null?new Uri[]{data.getData()}:null);fileCallback=null;}}
