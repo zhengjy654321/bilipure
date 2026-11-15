@@ -62,12 +62,21 @@ function panel(on){home=false;$('.home').hidden=true;official=false;setMode(on?'
 function homepage(){home=true;official=false;$('.home').hidden=false;setMode(mode,false);renderHome();applyStyle();document.querySelectorAll('video').forEach(v=>v.pause());}
 function drag(handle,el,k){let hold=null,suppress=false;handle.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('button')&&e.target.closest('button')!==handle)return;const r=el.getBoundingClientRect();hold={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top,moved:false};handle.setPointerCapture(e.pointerId);});handle.addEventListener('pointermove',e=>{if(!hold||e.pointerId!==hold.id)return;const dx=e.clientX-hold.x,dy=e.clientY-hold.y;if(Math.hypot(dx,dy)>6)hold.moved=true;if(!hold.moved)return;e.preventDefault();el.classList.add('dragging');const v=viewport(),r=el.getBoundingClientRect();const x=clamp(hold.left+dx-v.x,4,Math.max(4,v.w-r.width-4)),y=clamp(hold.top+dy-v.y,4,Math.max(4,v.h-r.height-4));el.style.left=(x+v.x)+'px';el.style.top=(y+v.y)+'px';db.ui.positions[positionKey(k)]={x,y};});const end=e=>{if(!hold||e.pointerId!==hold.id)return;suppress=hold.moved;hold=null;el.classList.remove('dragging');save();setTimeout(()=>suppress=false,350);};handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);handle.addEventListener('click',e=>{if(suppress){e.preventDefault();e.stopImmediatePropagation();suppress=false;}},true);}
 drag($('#toggle'),$('#toggle'),'closed');drag($('.mini'),$('.mini'),'mini');drag($('.panel header'),$('.panel'),'full');
+const seekControls=document.createElement('div');seekControls.className='fullscreen-seek';seekControls.hidden=true;seekControls.setAttribute('aria-label','全屏快进快退');
+seekControls.innerHTML='<button type="button" data-seek="-15" aria-label="后退15秒"><span>↶</span>−15 秒</button><button type="button" data-seek="15" aria-label="前进15秒"><span>↷</span>+15 秒</button>';
+const seekStyle=document.createElement('style');seekStyle.textContent='.fullscreen-seek{position:fixed;right:max(10px,env(safe-area-inset-right));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px;z-index:2147483647}.fullscreen-seek button{width:58px;height:58px;min-height:48px;padding:3px;border-radius:15px;background:#183d32d9;color:#fff;border:1px solid #ffffff50;box-shadow:0 3px 12px #0003;font-size:12px;line-height:17px;touch-action:manipulation}.fullscreen-seek button span{display:block;font-size:25px;line-height:26px}.fullscreen-seek button:active{background:#db9937;color:#173d2e;transform:scale(.94)}';root.append(seekStyle,seekControls);
+seekControls.addEventListener('click',e=>{const button=e.target.closest('[data-seek]');if(!button)return;
+ if(!video||!Number.isFinite(video.duration)||video.duration<=0){toast('视频尚未就绪');return;}
+ completedOnEnd=false;video.currentTime=clamp(video.currentTime+Number(button.dataset.seek),0,video.duration);sync(true);updateMetrics();
+});
+
 // A fullscreen element hides DOM siblings regardless of their z-index.
 // Keep the same live panel inside the fullscreen player, never clone it.
 function fullscreenElement(){return document.fullscreenElement||document.webkitFullscreenElement;}
 function positionKey(k){return (fullscreenElement()?'fullscreen:':'')+k;}
 function syncFullscreenPanel(){
  const target=fullscreenElement();
+ seekControls.hidden=!target;
  const parent=target&&!/^(VIDEO|IFRAME)$/.test(target.tagName)?target:document.documentElement;
  if(parent!==host&&host.parentNode!==parent)parent.append(host);
  setMode(mode,false);
