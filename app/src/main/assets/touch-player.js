@@ -25,7 +25,7 @@
   const clamp=n=>Math.max(0,Math.min(video.duration,n));
   const stop=e=>{e.stopPropagation();if(e.cancelable)e.preventDefault();};
   function restoreRate(){if(oldRate!==null){video.playbackRate=oldRate;oldRate=null;}}
-  function autoHide(){clearTimeout(hideTimer);if(!bar.hidden&&!video.paused&&!scrubbing)hideTimer=setTimeout(()=>{if(!bar.contains(document.activeElement))bar.hidden=true;},3200);}
+  function autoHide(){clearTimeout(hideTimer);if(!bar.hidden&&!video.paused&&!scrubbing)hideTimer=setTimeout(()=>{if(document.activeElement!==speed)bar.hidden=true;},3200);}
   function show(){bar.hidden=false;render();autoHide();}
   function togglePlay(){if(video.paused)video.play().catch(()=>{hint.textContent='暂时无法播放，请重试';hint.hidden=false;});else video.pause();show();}
   function render(){if(disposed)return;el.querySelector('[data-action=play]').textContent=video.paused?'播放':'暂停';el.querySelector('.orange-touch-time').textContent=time(video.currentTime)+' / '+time(video.duration);if(!scrubbing)range.value=ready()?video.currentTime/video.duration*10000:0;range.disabled=!ready();if(oldRate===null)speed.value=String(video.playbackRate);}
@@ -59,7 +59,7 @@
   range.addEventListener('input',()=>{scrubbing=true;clearTimeout(hideTimer);if(ready())el.querySelector('.orange-touch-time').textContent=time(Number(range.value)/10000*video.duration)+' / '+time(video.duration);});
   range.addEventListener('change',()=>{if(ready())video.currentTime=Number(range.value)/10000*video.duration;scrubbing=false;render();autoHide();});
   range.addEventListener('pointercancel',()=>{scrubbing=false;render();autoHide();});
-  speed.addEventListener('change',()=>{restoreRate();video.playbackRate=Number(speed.value);autoHide();});
+  speed.addEventListener('change',()=>{restoreRate();video.playbackRate=Number(speed.value);speed.blur();autoHide();});
   const events=['timeupdate','durationchange','loadedmetadata','ratechange','play','pause','ended'];for(const name of events)video.addEventListener(name,render);
   const pause=()=>{cancel();show();};video.addEventListener('pause',pause);video.addEventListener('play',autoHide);
   const visibility=()=>{if(document.hidden){cancel();clearTimeout(tapTimer);lastTap=0;}};document.addEventListener('visibilitychange',visibility);window.addEventListener('blur',cancel);document.addEventListener('fullscreenchange',cancel);
