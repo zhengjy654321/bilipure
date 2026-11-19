@@ -19,7 +19,7 @@
   const oldPosition=parent.style.position;if(getComputedStyle(parent).position==='static')parent.style.position='relative';
   parent.classList.add('orange-touch-managed');
   const el=document.createElement('div');el.className='orange-touch-player';
-  el.innerHTML=`<div class="orange-touch-surface" aria-label="单击显示控制栏，左右滑动定位，长按临时倍速"></div><div class="orange-touch-hint" hidden></div><div class="orange-touch-bar" hidden><button data-action="play" aria-label="播放或暂停">播放</button><span class="orange-touch-time"></span><input type="range" min="0" max="10000" value="0" aria-label="视频进度"><select aria-label="播放倍速">${[.5,.75,1,1.25,1.5,1.75,2,2.5,3].map(x=>`<option value="${x}">${x}×</option>`).join('')}</select><button data-action="danmaku">弹幕</button><button data-action="settings">画质／设置</button><button data-action="full">全屏</button></div>`;
+  el.innerHTML=`<div class="orange-touch-surface" aria-label="单击显示控制栏，横滑定位，左侧竖滑调亮度，右侧竖滑调音量，长按临时倍速"></div><div class="orange-touch-hint" hidden></div><div class="orange-touch-bar" hidden><button data-action="play" aria-label="播放或暂停">播放</button><span class="orange-touch-time"></span><input type="range" min="0" max="10000" value="0" aria-label="视频进度"><select aria-label="播放倍速">${[.5,.75,1,1.25,1.5,1.75,2,2.5,3].map(x=>`<option value="${x}">${x}×</option>`).join('')}</select><button data-action="danmaku">弹幕</button><button data-action="settings">画质／设置</button><button data-action="full">全屏</button></div>`;
   const returnButton=document.createElement('button');returnButton.textContent='返回触摸操作';returnButton.hidden=true;returnButton.style.cssText='position:absolute;left:12px;top:12px;min-height:44px;padding:10px;background:#183d32;color:white;border:1px solid white;border-radius:12px;pointer-events:auto';el.append(returnButton);
   parent.append(el);const surface=el.querySelector('.orange-touch-surface'),bar=el.querySelector('.orange-touch-bar'),hint=el.querySelector('.orange-touch-hint'),range=el.querySelector('input'),speed=el.querySelector('select');
   let gesture=null,holdTimer=0,hideTimer=0,tapTimer=0,lastTap=0,scrubbing=false,oldRate=null,disposed=false,nativeMode=nativeControls;
@@ -51,12 +51,28 @@
   const dmPoll=setInterval(renderDanmaku,400);
   function render(){if(disposed)return;renderDanmaku();el.querySelector('[data-action=play]').textContent=video.paused?'播放':'暂停';el.querySelector('.orange-touch-time').textContent=time(video.currentTime)+' / '+time(video.duration);if(!scrubbing)range.value=ready()?video.currentTime/video.duration*10000:0;range.disabled=!ready();if(oldRate===null)speed.value=String(video.playbackRate);}
   function cancel(){clearTimeout(holdTimer);gesture=null;restoreRate();hint.hidden=true;}
-  function down(e){if(nativeMode)return;stop(e);if(gesture){cancel();return;}if(e.button!==0)return;gesture={id:e.pointerId,x:e.clientX,y:e.clientY,start:video.currentTime,width:Math.max(1,surface.getBoundingClientRect().width),kind:'tap',target:video.currentTime};surface.setPointerCapture?.(e.pointerId);
+  function down(e){if(nativeMode)return;stop(e);if(gesture){cancel();return;}if(e.button!==0)return;const rect=surface.getBoundingClientRect();
+   gesture={levelId:Math.random().toString(36).slice(2),side:e.clientX<rect.left+rect.width/2?'brightness':'volume',height:Math.max(1,rect.height),id:e.pointerId,x:e.clientX,y:e.clientY,start:video.currentTime,width:Math.max(1,surface.getBoundingClientRect().width),kind:'tap',target:video.currentTime};surface.setPointerCapture?.(e.pointerId);
    holdTimer=setTimeout(()=>{if(!gesture||gesture.kind!=='tap'||video.paused)return;gesture.kind='hold';oldRate=video.playbackRate;video.playbackRate=Math.max(2,oldRate);hint.textContent=`临时 ${video.playbackRate}×\n松手恢复 ${oldRate}×`;hint.hidden=false;},450);
   }
   function move(e){if(!gesture||gesture.id!==e.pointerId)return;stop(e);const dx=e.clientX-gesture.x,dy=e.clientY-gesture.y;
    if(gesture.kind==='hold')return;
-   if(gesture.kind==='tap'&&Math.hypot(dx,dy)>10){clearTimeout(holdTimer);gesture.kind=Math.abs(dx)>Math.abs(dy)*1.2&&ready()?'seek':'cancel';clearTimeout(tapTimer);lastTap=0;}
+   if(gesture.kind==='tap'&&Math.hypot(dx,dy)>10){
+    clearTimeout(holdTimer);clearTimeout(tapTimer);lastTap=0;
+    if(Math.abs(dx)>Math.abs(dy)*1.2)gesture.kind=ready()?'seek':'cancel';
+    else if(Math.abs(dy)>Math.abs(dx)*1.2)gesture.kind=gesture.side;
+    else return;
+   }
+   if(gesture.kind==='volume'||gesture.kind==='brightness'){
+    const g=gesture;
+    const delta=Math.round(-100*dy/g.height)/100;
+    if(g.delta===delta)return;
+    g.delta=delta;
+    if(typeof orangeCall==='function')orangeCall('level',{kind:g.kind,gesture:g.levelId,delta}).then(level=>{
+     if(gesture===g&&g.delta===delta){hint.textContent=(g.kind==='volume'?'音量 ':'亮度 ')+Math.round(level*100)+'%';hint.hidden=false;}
+    }).catch(()=>{if(gesture===g){hint.textContent='当前设备不允许调节';hint.hidden=false;}});
+    return;
+   }
    if(gesture.kind==='seek'){gesture.target=clamp(gesture.start+dx/gesture.width*60);const delta=gesture.target-gesture.start;hint.textContent=`${delta>=0?'+':''}${delta.toFixed(1)} 秒\n${time(gesture.target)} / ${time(video.duration)}\n松手跳转`;hint.hidden=false;}
   }
   function up(e){if(!gesture||gesture.id!==e.pointerId)return;stop(e);const g=gesture;cancel();

@@ -53,6 +53,11 @@ public class MainActivity extends Activity {
     private WebView web;
     private FrameLayout container;
     private LinearLayout toolbar;
+    private Button loadingCover;
+    private long navigation;
+    private AlertDialog loginDialog;
+    private String levelGesture;
+    private double initialLevel;
     private View fullscreen;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private SharedPreferences preferences;
@@ -69,8 +74,8 @@ public class MainActivity extends Activity {
         LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL);
         toolbar = new LinearLayout(this); toolbar.setBackgroundColor(Color.rgb(248,249,241));
         addButton("‹ 返回", () -> goBack());
-        addButton("🍋 主页", () -> web.loadUrl(HOME));
-        addButton("刷新", () -> web.reload());
+        addButton("🍋 主页", () -> {coverHome();web.loadUrl(HOME);});
+        addButton("刷新", () -> {coverHome();web.reload();});
         addButton("备份进度", () -> exportBackup());
         layout.addView(toolbar, new LinearLayout.LayoutParams(-1, dp(44)));
         container = new FrameLayout(this);
@@ -85,6 +90,12 @@ public class MainActivity extends Activity {
         setContentView(layout);
         ViewCompat.requestApplyInsets(layout);
         web = new WebView(this); container.addView(web, new FrameLayout.LayoutParams(-1,-1));
+        loadingCover = new Button(this);
+        loadingCover.setBackgroundColor(Color.rgb(248,249,241));
+        loadingCover.setTextColor(Color.rgb(43,80,61));
+        container.addView(loadingCover,new FrameLayout.LayoutParams(-1,-1));
+        loadingCover.setOnClickListener(v -> { coverHome(); web.loadUrl(HOME); });
+        coverHome();
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
         settings.setUseWideViewPort(true); settings.setLoadWithOverviewMode(true);
@@ -122,10 +133,19 @@ public class MainActivity extends Activity {
                 } else showToast("已留在网页播放，未跳转其他应用");
                 return true;
             }
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) {
+                coverHome();
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest req, android.webkit.WebResourceError error) {
+                if(req.isForMainFrame()) loadingCover.setText("课堂加载失败，点此重试");
+            }
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 Uri uri = Uri.parse(url);
-                if (ORIGINS.contains(uri.getScheme()+"://"+uri.getHost())) view.evaluateJavascript(injection, null);
+                if (!url.equals(view.getUrl())) return;
+                if (ORIGINS.contains(uri.getScheme()+"://"+uri.getHost())) {
+                    view.evaluateJavascript("(()=>{const lemonPageEpoch="+navigation+";"+injection+"})();",null);
+                }
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -155,6 +175,64 @@ public class MainActivity extends Activity {
         });
         if(state==null || web.restoreState(state)==null) web.loadUrl(HOME);
     }
+    private void coverHome() {
+        final long epoch=++navigation;
+        loadingCover.setText("🍋 柠檬课堂");
+        loadingCover.setVisibility(View.VISIBLE);
+        loadingCover.postDelayed(()->{if(navigation==epoch&&loadingCover.getVisibility()==View.VISIBLE)
+            loadingCover.setText("课堂尚未就绪，点此重试");},15000);
+    }
+
+    private void showLogin() {
+        if(loginDialog!=null)return;
+        WebView login=new WebView(this);
+        WebSettings settings=login.getSettings();
+        settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
+        settings.setUseWideViewPort(true);settings.setLoadWithOverviewMode(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(login,true);
+        loginDialog=new AlertDialog.Builder(this).setTitle("登录 B 站").setView(login)
+            .setNegativeButton("关闭",null).create();
+        loginDialog.setOnDismissListener(d->{loginDialog=null;login.stopLoading();
+            if(login.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)login.getParent()).removeView(login);
+            login.destroy();CookieManager.getInstance().flush();
+            web.evaluateJavascript("window.dispatchEvent(new Event('lemon-login-closed'))",null);});
+        login.setWebViewClient(new WebViewClient(){
+            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req){
+                Uri uri=req.getUrl();if(!req.isForMainFrame())return false;
+                if(!isBiliHttps(uri))return true;
+                if(ORIGINS.contains("https://"+uri.getHost())&&("/".equals(uri.getPath())||uri.getPath().isEmpty())){
+                    if(loginDialog!=null)loginDialog.dismiss();return true;
+                }
+                return false;
+            }
+            @Override public void onPageFinished(WebView v,String url){
+                if("passport.bilibili.com".equals(Uri.parse(url).getHost()))
+                    v.evaluateJavascript("(()=>{const s=document.createElement('style');s.textContent='header,footer,.bili-header,#biliMainHeader,.international-header,.international-footer{display:none!important}';document.head.append(s)})()",null);
+            }
+        });
+        loginDialog.show();
+        login.loadUrl("https://passport.bilibili.com/login?gourl=https%3A%2F%2Fwww.bilibili.com%2F");
+    }
+
+    private double adjustLevel(JSONObject msg)throws Exception{
+        String kind=msg.getString("kind"),gesture=kind+":"+msg.getString("gesture");
+        android.media.AudioManager audio=(android.media.AudioManager)getSystemService(AUDIO_SERVICE);
+        int stream=android.media.AudioManager.STREAM_MUSIC;
+        boolean volume="volume".equals(kind);
+        if(!volume&&!"brightness".equals(kind))throw new Exception("unknown level");
+        int max=Math.max(1,audio.getStreamMaxVolume(stream));
+        WindowManager.LayoutParams attrs=getWindow().getAttributes();
+        if(!gesture.equals(levelGesture)){
+            initialLevel=volume?(double)audio.getStreamVolume(stream)/max:attrs.screenBrightness;
+            if(!volume&&initialLevel<0)initialLevel=android.provider.Settings.System.getInt(getContentResolver(),android.provider.Settings.System.SCREEN_BRIGHTNESS,128)/255.0;
+            levelGesture=gesture;
+        }
+        double level=Math.min(1,Math.max(volume?0:.03,initialLevel+msg.getDouble("delta")));
+        if(volume){if(!audio.isVolumeFixed())audio.setStreamVolume(stream,(int)Math.round(level*max),0);
+            return (double)audio.getStreamVolume(stream)/max;}
+        attrs.screenBrightness=(float)level;getWindow().setAttributes(attrs);return level;
+    }
     private boolean isBiliHttps(Uri uri) {String h=uri.getHost();return "https".equals(uri.getScheme())&&h!=null&&(h.equals("bilibili.com")||h.endsWith(".bilibili.com"));}
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
     private void addButton(String label,Runnable action){Button b=new Button(this);b.setText(label);b.setTextSize(12);b.setAllCaps(false);b.setPadding(0,0,0,0);b.setOnClickListener(v->action.run());toolbar.addView(b,new LinearLayout.LayoutParams(0,-1,1));}
@@ -165,6 +243,16 @@ public class MainActivity extends Activity {
     private void handleMessage(JSONObject msg,JavaScriptReplyProxy proxy)throws Exception{
         String id=msg.getString("id"),op=msg.getString("op");
         if(id.length()>100)return;
+        if(op.equals("ready")){
+            final long epoch=msg.optLong("epoch",-1);
+            if(epoch==navigation)web.postVisualStateCallback(epoch,new WebView.VisualStateCallback(){
+                @Override public void onComplete(long token){if(token==navigation)loadingCover.setVisibility(View.GONE);}
+            });
+            reply(proxy,id,true,null);return;
+        }
+        if(op.equals("login")){showLogin();reply(proxy,id,true,null);return;}
+        if(op.equals("loginDone")){if(loginDialog!=null)loginDialog.dismiss();reply(proxy,id,true,null);return;}
+        if(op.equals("level")){try{reply(proxy,id,adjustLevel(msg),null);}catch(Exception e){reply(proxy,id,null,"当前设备不允许调节");}return;}
         if(op.equals("get")||op.equals("set")){
             if(!KEY.equals(msg.optString("key"))){reply(proxy,id,null,"不支持的存储键");return;}
             if(op.equals("get")){reply(proxy,id,preferences.getString(KEY,null),null);return;}

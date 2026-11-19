@@ -38,7 +38,7 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/bilipure-0.5.0-test.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/bilipure-0.6.0-test.apk
           sha256sum dist/*.apk > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
