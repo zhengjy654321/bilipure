@@ -1,7 +1,7 @@
 name: Build Android APK
 on:
   push:
-    branches: [main]
+    branches: [temporary/side-by-side-060]
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,11 +38,16 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/bilipure-0.6.0-test.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/lemon-classroom-temporary-0.6.0.apk
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$aapt" dump badging dist/*.apk > /tmp/badging.txt
+          grep -F "package: name='com.jiyu.bilipure.trial'" /tmp/badging.txt
+          grep -F "application-label:'柠檬课堂·临时版'" /tmp/badging.txt
+          grep -F "launchable-activity: name='com.jiyu.bilipure.MainActivity'" /tmp/badging.txt
           sha256sum dist/*.apk > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: bilipure-apk
           path: dist/*
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
