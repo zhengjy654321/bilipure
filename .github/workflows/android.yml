@@ -33,12 +33,17 @@ jobs:
           node tests/goal-core.test.cjs
           node --check app/src/main/assets/rewards-core.js
           node tests/rewards-core.test.cjs
+      - name: Check tablet login gestures in Chrome
+        run: |
+          python -m venv "$RUNNER_TEMP/login-test"
+          "$RUNNER_TEMP/login-test/bin/pip" install playwright==1.55.0
+          "$RUNNER_TEMP/login-test/bin/python" tests/homepage-login.py
       - name: Build and lint
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
       - name: Prepare APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/lemon-classroom-temporary-0.6.1.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/lemon-classroom-temporary-0.6.2.apk
           aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$aapt" dump badging dist/*.apk > /tmp/badging.txt
           grep -F "package: name='com.jiyu.bilipure.trial'" /tmp/badging.txt
