@@ -55,7 +55,6 @@ public class MainActivity extends Activity {
     private LinearLayout toolbar;
     private Button loadingCover;
     private long navigation;
-    private AlertDialog loginDialog;
     private String levelGesture;
     private double initialLevel;
     private View fullscreen;
@@ -183,38 +182,6 @@ public class MainActivity extends Activity {
             loadingCover.setText("课堂尚未就绪，点此重试");},15000);
     }
 
-    private void showLogin() {
-        if(loginDialog!=null)return;
-        WebView login=new WebView(this);
-        WebSettings settings=login.getSettings();
-        settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);
-        settings.setUseWideViewPort(true);settings.setLoadWithOverviewMode(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(login,true);
-        loginDialog=new AlertDialog.Builder(this).setTitle("登录 B 站").setView(login)
-            .setNegativeButton("关闭",null).create();
-        loginDialog.setOnDismissListener(d->{loginDialog=null;login.stopLoading();
-            if(login.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)login.getParent()).removeView(login);
-            login.destroy();CookieManager.getInstance().flush();
-            web.evaluateJavascript("window.dispatchEvent(new Event('lemon-login-closed'))",null);});
-        login.setWebViewClient(new WebViewClient(){
-            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req){
-                Uri uri=req.getUrl();if(!req.isForMainFrame())return false;
-                if(!isBiliHttps(uri))return true;
-                if(ORIGINS.contains("https://"+uri.getHost())&&("/".equals(uri.getPath())||uri.getPath().isEmpty())){
-                    if(loginDialog!=null)loginDialog.dismiss();return true;
-                }
-                return false;
-            }
-            @Override public void onPageFinished(WebView v,String url){
-                if("passport.bilibili.com".equals(Uri.parse(url).getHost()))
-                    v.evaluateJavascript("(()=>{const s=document.createElement('style');s.textContent='header,footer,.bili-header,#biliMainHeader,.international-header,.international-footer{display:none!important}';document.head.append(s)})()",null);
-            }
-        });
-        loginDialog.show();
-        login.loadUrl("https://passport.bilibili.com/login?gourl=https%3A%2F%2Fwww.bilibili.com%2F");
-    }
-
     private double adjustLevel(JSONObject msg)throws Exception{
         String kind=msg.getString("kind"),gesture=kind+":"+msg.getString("gesture");
         android.media.AudioManager audio=(android.media.AudioManager)getSystemService(AUDIO_SERVICE);
@@ -250,8 +217,6 @@ public class MainActivity extends Activity {
             });
             reply(proxy,id,true,null);return;
         }
-        if(op.equals("login")){showLogin();reply(proxy,id,true,null);return;}
-        if(op.equals("loginDone")){if(loginDialog!=null)loginDialog.dismiss();reply(proxy,id,true,null);return;}
         if(op.equals("level")){try{reply(proxy,id,adjustLevel(msg),null);}catch(Exception e){reply(proxy,id,null,"当前设备不允许调节");}return;}
         if(op.equals("get")||op.equals("set")){
             if(!KEY.equals(msg.optString("key"))){reply(proxy,id,null,"不支持的存储键");return;}
@@ -287,7 +252,8 @@ public class MainActivity extends Activity {
         if(request==EXPORT_JSON){if(result!=RESULT_OK||data==null||data.getData()==null){finishExport("已取消导出");return;}try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new Exception();out.write(exportText.getBytes(StandardCharsets.UTF_8));finishExport(null);}catch(Exception e){finishExport("文件保存失败，请重新导出");}}
     }
     private void exitFullscreen(){if(fullscreen==null)return;container.removeView(fullscreen);fullscreen=null;web.setVisibility(View.VISIBLE);toolbar.setVisibility(View.VISIBLE);WindowCompat.getInsetsController(getWindow(),getWindow().getDecorView()).show(WindowInsetsCompat.Type.systemBars());if(fullscreenCallback!=null){fullscreenCallback.onCustomViewHidden();fullscreenCallback=null;}}
-    private void goBack(){if(fullscreen!=null)exitFullscreen();else if(web.canGoBack())web.goBack();else new AlertDialog.Builder(this).setMessage("退出课堂？").setPositiveButton("退出",(d,w)->finish()).setNegativeButton("取消",null).show();}
+    private void goBack(){if(fullscreen!=null)exitFullscreen();else web.evaluateJavascript("document.documentElement.hasAttribute('data-lemon-login')", result->{if("true".equals(result)){coverHome();web.loadUrl(HOME);}else backFromClassroom();});}
+    private void backFromClassroom(){if(web.canGoBack())web.goBack();else new AlertDialog.Builder(this).setMessage("退出课堂？").setPositiveButton("退出",(d,w)->finish()).setNegativeButton("取消",null).show();}
     @Override public void onBackPressed(){goBack();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);if(web!=null)web.saveState(out);}
     @Override protected void onPause(){super.onPause();if(web!=null){web.evaluateJavascript("document.querySelectorAll('video').forEach(v=>v.pause())",null);web.onPause();CookieManager.getInstance().flush();}}

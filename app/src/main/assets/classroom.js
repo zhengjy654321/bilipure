@@ -86,16 +86,55 @@ function checkLogin(){
   return authState;
  })();return authRequest;
 }
-async function loginAction(){
- if(authState==='error'){await checkLogin();return;}
- if(authState==='member'||loginOpen)return;
+const loginPanels = '.bili-mini-mask,.bili-mini-login,.bili-mini-login-wrapper,.bili-mini-content-wrapper,iframe[src*="passport.bilibili.com"],[role="dialog"][aria-label*="登录"]';
+const loginExtras = '.geetest_panel,.geetest_panel_box,.geetest_box_wrap,.geetest_popup_wrap,.geetest_captcha,iframe[src*="geetest"]';
+function openHomepageLogin(){
+ if(loginOpen)return;
  loginOpen=true;
- try{
-  await orangeCall('login');
-  if(loginOpen)loginPoll=setInterval(async()=>{if(await checkLogin()==='member'&&loginOpen){clearInterval(loginPoll);await orangeCall('loginDone');}},3000);
- }catch{loginOpen=false;toast('登录窗口打开失败，请重试');}
+ const html=document.documentElement;
+ html.setAttribute('data-lemon-login','');
+ const sheet=document.createElement('style');
+ const allowed=':is('+loginPanels+','+loginExtras+')';
+ sheet.textContent=`
+ html[data-lemon-login],html[data-lemon-login] body{background:#f8f9ee!important;background-image:none!important}
+ html[data-lemon-login] body *:not(${allowed}):not(${allowed} *){visibility:hidden!important;pointer-events:none!important}
+ html[data-lemon-login] ${allowed}{visibility:visible!important;pointer-events:auto!important}
+ html[data-lemon-login] #orange-classroom,html[data-lemon-login] .orange-touch-player{display:none!important}
+ `;
+ document.head.append(sheet);
+ const back=document.createElement('button');back.type='button';back.textContent='正在打开 B 站登录 · 返回课堂';
+ back.style.cssText='position:fixed;top:8px;left:8px;z-index:2147483647;padding:9px 14px;border:1px solid #cdd6c8;border-radius:12px;background:#fafbf4;color:#29433b';
+ html.append(back);
+ let clicked=false,seen=false,ended=false,missingSince=0;
+ const start=Date.now();
+ function finish(){
+  if(ended)return;ended=true;clearInterval(watch);clearInterval(loginPoll);
+  // A fresh classroom document also disposes of any official modal and its focus trap.
+  location.replace(location.origin+'/');
+ }
+ back.onclick=finish;
+ function scan(){
+  if(ended)return;
+  const visible=Array.from(document.querySelectorAll(loginPanels)).some(el=>el.getClientRects().length&&getComputedStyle(el).visibility==='visible');
+  if(visible){seen=true;missingSince=0;back.hidden=true;return;}
+  if(seen){if(!missingSince)missingSince=Date.now();if(Date.now()-missingSince>700)finish();return;}
+  if(!clicked){
+   const candidates=document.querySelectorAll('.header-login-entry,.login-entry,.header-login-entry__button,.bili-header .login-btn,#biliMainHeader button,.bili-header__bar button');
+   const entry=Array.from(candidates).find(el=>el.matches('.header-login-entry,.login-entry,.header-login-entry__button,.login-btn')||el.textContent.trim()==='登录');
+   if(entry){clicked=true;entry.click();}
+  }
+  if(Date.now()-start>12000)back.textContent='登录框未出现 · 返回课堂重试';
+ }
+ const watch=setInterval(scan,250);
+ loginPoll=setInterval(async()=>{if(await checkLogin()==='member')finish();},3000);
+ scan();
 }
-window.addEventListener('lemon-login-closed',()=>{loginOpen=false;clearInterval(loginPoll);checkLogin();});
+async function loginAction(){
+ if(authState==='error'){await checkLogin();if(authState!=='guest')return;}
+ if(authState==='member'||loginOpen)return;
+ if(!/^\/(?:zh-Hans\/?)?$/.test(location.pathname)){location.assign('https://www.bilibili.com/?lemon-login=1');return;}
+ openHomepageLogin();
+}
 root.addEventListener('click',e=>{if(e.target.closest('[data-auth]'))loginAction();});
 function authMarkup(){return '<small data-login-note></small><button data-auth>'+authLabel()+'</button>';}
 function homepage(){home=true;official=false;$('.home').hidden=false;setMode(mode,false);renderHome();applyStyle();document.querySelectorAll('video').forEach(v=>v.pause());}
@@ -274,5 +313,6 @@ window.addEventListener('pagehide',()=>{stepGoal(false);save(true);});
 renderGoal();
 
 window.addEventListener('pagehide',()=>{sync(true);save(true);});checkLogin();await checkRoute();
+if(home&&new URL(location.href).searchParams.get("lemon-login")==="1")openHomepageLogin();
 if(typeof lemonPageEpoch!=='undefined'&&(home||/\/video\/BV/.test(location.pathname)))requestAnimationFrame(()=>orangeCall('ready',{epoch:lemonPageEpoch}).catch(()=>{}));
 })();
