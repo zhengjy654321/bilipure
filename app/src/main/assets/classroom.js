@@ -86,86 +86,33 @@ function checkLogin(){
   return authState;
  })();return authRequest;
 }
-const loginPanels = '.bili-mini-mask,.bili-mini-login,.bili-mini-login-wrapper,.bili-mini-content-wrapper,iframe[src*="passport.bilibili.com"],[role="dialog"][aria-label*="登录"]';
-const loginExtras = '.geetest_panel,.geetest_panel_box,.geetest_box_wrap,.geetest_popup_wrap,.geetest_captcha,iframe[src*="geetest"]';
 function openHomepageLogin(){
  if(loginOpen)return;
  loginOpen=true;
  const html=document.documentElement;
  html.setAttribute('data-lemon-login','');
  const sheet=document.createElement('style');
- const allowed=':is('+loginPanels+','+loginExtras+',[data-lemon-entry],[data-lemon-form])';
  sheet.textContent=`
- html[data-lemon-login],html[data-lemon-login] body{background:#f8f9ee!important;background-image:none!important}
- html[data-lemon-login] body *:not(${allowed}):not(${allowed} *){visibility:hidden!important;pointer-events:none!important}
- html[data-lemon-login] ${allowed}{visibility:visible!important;pointer-events:auto!important}
- html[data-lemon-login] [data-lemon-entry]{position:fixed!important;inset:50% auto auto 50%!important;transform:translate(-50%,-50%)!important;margin:0!important;box-sizing:border-box!important;width:max(180px,18vw)!important;height:max(56px,5.6vw)!important;max-width:85vw!important;max-height:20vh!important;display:grid!important;place-items:center!important;border:0!important;border-radius:16px!important;background:#21735a!important;color:white!important;font:bold 22px system-ui!important;opacity:1!important;z-index:2147483646!important;cursor:pointer!important;touch-action:manipulation!important}
- html[data-lemon-login] [data-lemon-entry]::after{content:'登录 B 站';position:absolute;inset:0;display:grid;place-items:center;background:inherit;color:white;border-radius:inherit;pointer-events:none}
- html[data-lemon-login] [data-lemon-entry]::backdrop{background:transparent;pointer-events:none}
- html[data-lemon-login] #orange-classroom,html[data-lemon-login] .orange-touch-player{display:none!important}
+ html[data-lemon-login],html[data-lemon-login] body{background:#fafbf5!important}
+ html[data-lemon-login] :is(#orange-classroom,.orange-touch-player,.bili-header__banner,.bili-banner,.bili-header__channel,.bili-layout,.bili-feed4-layout,.recommended-container_floor-aside,.feed-roll-btn,.palette-button-wrap,.bili-footer,.ad-report,.ad-floor-exp):not(:has(.bili-header__bar,.header-login-entry,.login-entry)){display:none!important}
+ html[data-lemon-login] :is(.bili-header__bar,.international-header .mini-header__content){background:#fff!important;background-image:none!important}
+ html[data-lemon-login] :is(.left-entry,.center-search-container,.nav-search-box,.nav-search-form,.mini-header__title,.nav-link-ul,.right-entry__outside:not(.header-login-entry,.login-entry):not(:has(.header-login-entry,.login-entry,.header-login-entry__button)),.right-entry__outside-btn:not(.header-login-entry,.login-entry),.header-upload-entry,.header-message-entry,.header-dynamic-entry,.header-favorite-entry,.header-history-entry,.upload-entry){visibility:hidden!important;pointer-events:none!important}
+ html[data-lemon-login] :is(.left-entry,.nav-link-ul,.center-search-container) :is(a,button,input){visibility:hidden!important;pointer-events:none!important}
  `;
  document.head.append(sheet);
- const back=document.createElement('button');back.type='button';back.textContent='正在打开 B 站登录 · 返回课堂';
- back.style.cssText='position:fixed;top:8px;left:8px;z-index:2147483647;padding:9px 14px;border:1px solid #cdd6c8;border-radius:12px;background:#fafbf4;color:#29433b';
+ // Release the classroom homepage veil; official overlays can now render anywhere.
+ official=true;applyStyle();
+ const back=document.createElement('button');
+ back.type='button';back.textContent='返回课堂';
+ back.style.cssText='position:fixed;top:8px;left:8px;z-index:1000;min-height:44px;padding:8px 16px;border:1px solid #cdd6c8;border-radius:12px;background:#fafbf4;color:#29433b';
  html.append(back);
- let entry=null,addedPopover=false,lastTap=0,seen=false,ended=false,missingSince=0;
- function onTap(){lastTap=Date.now();back.textContent='已点登录，正在等待官方窗口 · 返回课堂';}
- function clearEntry(){
-  if(!entry)return;
-  entry.removeEventListener('click',onTap,true);
-  if(addedPopover){if(entry.matches(':popover-open'))entry.hidePopover();entry.removeAttribute('popover');}
-  entry.removeAttribute('data-lemon-entry');entry=null;addedPopover=false;
- }
- function findEntry(){
-  const specific='.header-login-entry__button,.header-login-entry,.login-entry,.login-panel-popover__login-btn,.bili-header .login-btn';
-  const controls='button,a,[role="button"],span,div';
-  const headers=document.querySelectorAll('header,#biliMainHeader,.bili-header,.bili-header__bar,.international-header');
-  const pool=[...document.querySelectorAll(specific)];
-  for(const header of headers)for(const el of header.querySelectorAll(controls)){
-   if(el.children.length<3&&/^(登录|立即登录|登\s+录)$/.test(el.textContent.trim()))pool.push(el);
-  }
-  return pool.find(el=>el.getClientRects().length&&!el.closest('[hidden]'));
- }
- function showEntry(el){
-  clearEntry();entry=el;entry.setAttribute('data-lemon-entry','');
-  entry.addEventListener('click',onTap,true);
-  if(entry.showPopover&&!entry.hasAttribute('popover')){
-   entry.setAttribute('popover','manual');
-   try{entry.showPopover();addedPopover=true;}catch{entry.removeAttribute('popover');}
-  }
- }
- function findForm(){
-  for(const field of document.querySelectorAll('input[type="tel"],input[placeholder*="手机号"],input[autocomplete="one-time-code"]')){
-   const box=field.closest('[role="dialog"],dialog,[class*="login"][class*="wrap"],[class*="login"][class*="box"],form');
-   if(box&&box.getClientRects().length)box.setAttribute('data-lemon-form','');
-  }
- }
-
- const start=Date.now();
  function finish(){
-  if(ended)return;ended=true;clearInterval(watch);clearInterval(loginPoll);
-  // A fresh classroom document also disposes of any official modal and its focus trap.
+  if(!loginOpen)return;
+  loginOpen=false;clearInterval(loginPoll);
   location.replace(location.origin+'/');
  }
  back.onclick=finish;
- function scan(){
-  if(ended)return;
-  if(lastTap)findForm();
-  const visible=Array.from(document.querySelectorAll(loginPanels+','+loginExtras+',[data-lemon-form]')).some(el=>el.getClientRects().length&&getComputedStyle(el).visibility==='visible');
-  if(visible){clearEntry();seen=true;missingSince=0;back.hidden=true;return;}
-  if(seen){if(!missingSince)missingSince=Date.now();if(Date.now()-missingSince>700)finish();return;}
-  if(!entry||!entry.isConnected){
-   clearEntry();
-   const candidate=findEntry();if(candidate)showEntry(candidate);
-  }
-  if(entry){
-   if(!lastTap)back.textContent='返回课堂';
-   else if(Date.now()-lastTap>8000)back.textContent='未检测到弹窗，可再点中央按钮 · 返回课堂';
-  }else if(Date.now()-start>12000)back.textContent='没找到首页登录按钮 · 返回课堂重试';
- }
- const watch=setInterval(scan,250);
  loginPoll=setInterval(async()=>{if(await checkLogin()==='member')finish();},3000);
- scan();
 }
 async function loginAction(){
  if(authState==='error'){await checkLogin();if(authState!=='guest')return;}

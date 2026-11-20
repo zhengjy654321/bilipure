@@ -43,7 +43,7 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/lemon-classroom-temporary-0.6.2.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/lemon-classroom-temporary-0.6.3.apk
           aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$aapt" dump badging dist/*.apk > /tmp/badging.txt
           grep -F "package: name='com.jiyu.bilipure.trial'" /tmp/badging.txt
