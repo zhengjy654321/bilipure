@@ -86,16 +86,40 @@ function checkLogin(){
   return authState;
  })();return authRequest;
 }
-async function loginAction(){
- if(authState==='error'){await checkLogin();return;}
- if(authState==='member'||loginOpen)return;
+function openHomepageLogin(){
+ if(loginOpen)return;
  loginOpen=true;
- try{
-  await orangeCall('login');
-  if(loginOpen)loginPoll=setInterval(async()=>{if(await checkLogin()==='member'&&loginOpen){clearInterval(loginPoll);await orangeCall('loginDone');}},3000);
- }catch{loginOpen=false;toast('登录窗口打开失败，请重试');}
+ const html=document.documentElement;
+ html.setAttribute('data-lemon-login','');
+ const sheet=document.createElement('style');
+ sheet.textContent=`
+ html[data-lemon-login],html[data-lemon-login] body{background:#fafbf5!important}
+ html[data-lemon-login] :is(#orange-classroom,.orange-touch-player,.bili-header__banner,.bili-banner,.bili-header__channel,.bili-layout,.bili-feed4-layout,.recommended-container_floor-aside,.feed-roll-btn,.palette-button-wrap,.bili-footer,.ad-report,.ad-floor-exp):not(:has(.bili-header__bar,.header-login-entry,.login-entry)){display:none!important}
+ html[data-lemon-login] :is(.bili-header__bar,.international-header .mini-header__content){background:#fff!important;background-image:none!important}
+ html[data-lemon-login] :is(.left-entry,.center-search-container,.nav-search-box,.nav-search-form,.mini-header__title,.nav-link-ul,.right-entry__outside:not(.header-login-entry,.login-entry):not(:has(.header-login-entry,.login-entry,.header-login-entry__button)),.right-entry__outside-btn:not(.header-login-entry,.login-entry),.header-upload-entry,.header-message-entry,.header-dynamic-entry,.header-favorite-entry,.header-history-entry,.upload-entry){visibility:hidden!important;pointer-events:none!important}
+ html[data-lemon-login] :is(.left-entry,.nav-link-ul,.center-search-container) :is(a,button,input){visibility:hidden!important;pointer-events:none!important}
+ `;
+ document.head.append(sheet);
+ // Release the classroom homepage veil; official overlays can now render anywhere.
+ official=true;applyStyle();
+ const back=document.createElement('button');
+ back.type='button';back.textContent='返回课堂';
+ back.style.cssText='position:fixed;top:8px;left:8px;z-index:1000;min-height:44px;padding:8px 16px;border:1px solid #cdd6c8;border-radius:12px;background:#fafbf4;color:#29433b';
+ html.append(back);
+ function finish(){
+  if(!loginOpen)return;
+  loginOpen=false;clearInterval(loginPoll);
+  location.replace(location.origin+'/');
+ }
+ back.onclick=finish;
+ loginPoll=setInterval(async()=>{if(await checkLogin()==='member')finish();},3000);
 }
-window.addEventListener('lemon-login-closed',()=>{loginOpen=false;clearInterval(loginPoll);checkLogin();});
+async function loginAction(){
+ if(authState==='error'){await checkLogin();if(authState!=='guest')return;}
+ if(authState==='member'||loginOpen)return;
+ if(!/^\/(?:zh-Hans\/?)?$/.test(location.pathname)){location.assign('https://www.bilibili.com/?lemon-login=1');return;}
+ openHomepageLogin();
+}
 root.addEventListener('click',e=>{if(e.target.closest('[data-auth]'))loginAction();});
 function authMarkup(){return '<small data-login-note></small><button data-auth>'+authLabel()+'</button>';}
 function homepage(){home=true;official=false;$('.home').hidden=false;setMode(mode,false);renderHome();applyStyle();document.querySelectorAll('video').forEach(v=>v.pause());}
@@ -136,7 +160,7 @@ for(const name of ['requestFullscreen','webkitRequestFullscreen','webkitRequestF
 for(const event of ['click','dblclick','pointerdown','pointerup','keydown'])host.addEventListener(event,e=>e.stopPropagation());
 
 window.addEventListener('resize',()=>setMode(mode,false));window.visualViewport?.addEventListener('resize',()=>setMode(mode,false));
-function renderHome(){const el=$('.home');el.innerHTML=`<header><div><b>🍋 柠檬课堂</b><div class="tag">LESS NOISE. MORE LEARNING.</div></div><button data-act="official">登录 B 站</button></header><section class="intro"><div><div class="pill" style="display:inline-block">专注模式 · Android · 0.6</div><h1 style="margin:16px 0">今天，也前进一步。</h1><p class="muted">只有你选的老师，和正在学的课程。</p></div><div class="orb">${skinArt(db.rewards.skin)}</div></section>${rewardSummary()}<div class="tools">${db.ups.map(u=>`<span class="pill">${esc(u.name)}</span>`).join('')}<button data-act="goal">学习目标</button><button data-act="manage">管理合集</button><button data-act="fromUp">从 UP 主添加</button><small data-login-note></small><button data-act="addUp">＋ 添加 UP 主</button><button data-act="addCourse">＋ 新建合集</button><button data-act="add">＋ 粘贴课程链接</button><button data-act="export">导出进度</button><button data-act="import">导入进度</button></div>${db.courses.map(c=>`<section class="course"><header><h3>${esc(c.title)}</h3><div class="course-actions"><small>${c.videos.length} 个视频</small><button data-manage="${esc(c.id)}">管理／排序</button><button data-from-up="${esc(c.id)}">从 UP 主添加</button></div></header><div class="cards">${c.videos.map((v,i)=>{const m=db.meta[v.bvid];return `<article class="card"><div class="tag">LESSON ${String(i+1).padStart(2,'0')}</div><h3>${esc(m?.title||v.title)}</h3><small>${m?m.pages.length+' 个分 P': '打开时读取真实目录'}</small><div class="go"><a href="https://www.bilibili.com/video/${esc(v.bvid)}/?oc_course=${encodeURIComponent(c.id)}&p=${db.cursor[c.id]?.bvid===v.bvid?db.cursor[c.id].p:1}">进入课堂 ↗</a><span class="pill">${m?(percent(entries(c).filter(e=>e.bvid===v.bvid))*100).toFixed(1)+'%':'待开始'}</span></div></article>`;}).join('')}</div></section>`).join('')}<p class="help">合集是自己的学习清单。可管理、排序、批量移动课程，也可以从指定 UP 主的投稿列表勾选添加。</p>`;updateAuthControls();el.onclick=e=>{const m=e.target.closest('[data-manage]'),u=e.target.closest('[data-from-up]');if(m){openManagement(m.dataset.manage);return;}if(u){openSource(u.dataset.fromUp);return;}const a=e.target.closest('[data-act]');if(a)action(a.dataset.act);};}
+function renderHome(){const el=$('.home');el.innerHTML=`<header><div><b>🍋 柠檬课堂</b><div class="tag">LESS NOISE. MORE LEARNING.</div></div><button data-act="official">登录 B 站</button></header><section class="intro"><div><div class="pill" style="display:inline-block">专注模式 · Android · 0.7</div><h1 style="margin:16px 0">今天，也前进一步。</h1><p class="muted">只有你选的老师，和正在学的课程。</p></div><div class="orb">${skinArt(db.rewards.skin)}</div></section>${rewardSummary()}<div class="tools">${db.ups.map(u=>`<span class="pill">${esc(u.name)}</span>`).join('')}<button data-act="goal">学习目标</button><button data-act="manage">管理合集</button><button data-act="fromUp">从 UP 主添加</button><small data-login-note></small><button data-act="addUp">＋ 添加 UP 主</button><button data-act="addCourse">＋ 新建合集</button><button data-act="add">＋ 粘贴课程链接</button><button data-act="export">导出进度</button><button data-act="import">导入进度</button></div>${db.courses.map(c=>`<section class="course"><header><h3>${esc(c.title)}</h3><div class="course-actions"><small>${c.videos.length} 个视频</small><button data-manage="${esc(c.id)}">管理／排序</button><button data-from-up="${esc(c.id)}">从 UP 主添加</button></div></header><div class="cards">${c.videos.map((v,i)=>{const m=db.meta[v.bvid];return `<article class="card"><div class="tag">LESSON ${String(i+1).padStart(2,'0')}</div><h3>${esc(m?.title||v.title)}</h3><small>${m?m.pages.length+' 个分 P': '打开时读取真实目录'}</small><div class="go"><a href="https://www.bilibili.com/video/${esc(v.bvid)}/?oc_course=${encodeURIComponent(c.id)}&p=${db.cursor[c.id]?.bvid===v.bvid?db.cursor[c.id].p:1}">进入课堂 ↗</a><span class="pill">${m?(percent(entries(c).filter(e=>e.bvid===v.bvid))*100).toFixed(1)+'%':'待开始'}</span></div></article>`;}).join('')}</div></section>`).join('')}<p class="help">合集是自己的学习清单。可管理、排序、批量移动课程，也可以从指定 UP 主的投稿列表勾选添加。</p><footer class="help" style="text-align:center">插件创作者：zjy</footer>`;updateAuthControls();el.onclick=e=>{const m=e.target.closest('[data-manage]'),u=e.target.closest('[data-from-up]');if(m){openManagement(m.dataset.manage);return;}if(u){openSource(u.dataset.fromUp);return;}const a=e.target.closest('[data-act]');if(a)action(a.dataset.act);};}
 function renderList(force=false){if(!active)return;const c=courseFor(active.bvid);if(!c){$('#list').innerHTML='';return;}const all=entries(c);const signature=JSON.stringify(all.map(e=>[e.key,state(e.key).done,state(e.key).lock]))+active.bvid+active.p;if(!force&&signature===lastRender)return;lastRender=signature;const list=$('#list');let group='';list.innerHTML=all.map(e=>{const s=state(e.key),done=s.lock===null?s.done:s.lock;const heading=group!==e.bvid?`<div class="chapter">${esc(db.meta[e.bvid]?.title)}</div>`:'';group=e.bvid;return heading+`<div class="row ${done?'done':''} ${e.bvid===active.bvid&&e.p===active.p?'current':''}" data-key="${esc(e.key)}"><div class="rowhead"><span class="mark">${done?'✓':'○'}</span><a class="rowtitle" href="https://www.bilibili.com/video/${e.bvid}/?oc_course=${encodeURIComponent(c.id)}&p=${e.p}">P${e.p} · ${esc(e.title)}</a></div><div class="rowtools"><button data-do="done">${done?'恢复未完成':'标为完成'}</button><button data-do="lock">${s.lock===null?'固定当前状态':'🔒 已固定 · 解除'}</button></div></div>`;}).join('');}
 $('#list').onclick=e=>{const b=e.target.closest('button[data-do]');if(!b)return;const row=b.closest('[data-key]'),s=state(row.dataset.key),done=s.lock===null?s.done:s.lock;if(b.dataset.do==='lock'){s.lock=s.lock===null?done:null;toast(s.lock===null?'已解除固定，将再次跟随播放':'已固定：'+(done?'已完成':'未完成'));}else{if(s.lock!==null)s.lock=!done;else{s.done=!done;const ent=entries(courseFor(active.bvid)).find(x=>x.key===row.dataset.key);s.position=!done?ent.duration:0;}toast(s.lock===null?'已修改；如需保留，请点“固定当前状态”':'固定状态已修改');}save();renderList(true);updateMetrics();};
 async function metadata(b,refresh=false){if(db.meta[b]&&!refresh)return db.meta[b];const d=await request(b);if(!db.ups.some(u=>String(u.mid)===String(d.owner.mid)))throw Error('该视频不属于已添加的 UP 主，请先在主页添加该 UP 主');db.meta[b]={bvid:b,title:d.title,owner:d.owner,pages:d.pages.map(p=>({page:p.page,cid:p.cid,part:p.part,duration:p.duration}))};save();return db.meta[b];}
@@ -274,5 +298,6 @@ window.addEventListener('pagehide',()=>{stepGoal(false);save(true);});
 renderGoal();
 
 window.addEventListener('pagehide',()=>{sync(true);save(true);});checkLogin();await checkRoute();
+if(home&&new URL(location.href).searchParams.get("lemon-login")==="1")openHomepageLogin();
 if(typeof lemonPageEpoch!=='undefined'&&(home||/\/video\/BV/.test(location.pathname)))requestAnimationFrame(()=>orangeCall('ready',{epoch:lemonPageEpoch}).catch(()=>{}));
 })();

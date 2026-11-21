@@ -33,16 +33,52 @@ jobs:
           node tests/goal-core.test.cjs
           node --check app/src/main/assets/rewards-core.js
           node tests/rewards-core.test.cjs
-      - name: Build and lint
-        run: gradle --no-daemon :app:assembleDebug :app:lintDebug
-      - name: Prepare APK
+      - name: Check tablet login gestures in Chrome
         run: |
+          python -m venv "$RUNNER_TEMP/login-test"
+          "$RUNNER_TEMP/login-test/bin/pip" install playwright==1.55.0
+          "$RUNNER_TEMP/login-test/bin/python" tests/homepage-login.py
+      - name: Build and lint
+        run: gradle --no-daemon :app:assembleRelease :app:lintRelease
+      - name: Check official package and prepare release
+        id: prepare
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPECTED_CERT: ${{ vars.ANDROID_SIGNER_SHA256 }}
+        run: |
+          set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/bilipure-0.6.0-test.apk
+          apk=app/build/outputs/apk/release/app-release-unsigned.apk
+          build_tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$build_tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.jiyu.bilipure' versionCode='10'" "$RUNNER_TEMP/badging.txt"
+          grep -F "application-label:'柠檬课堂'" "$RUNNER_TEMP/badging.txt"
+          if [[ -z "$KEYSTORE_B64" ]]; then
+            cp "$apk" dist/lemon-classroom-0.7.0-unsigned.apk
+            echo "artifact=unsigned-for-signing" >> "$GITHUB_OUTPUT"
+            echo "Release compiled; existing signing keystore is missing. No installable update produced." >> "$GITHUB_STEP_SUMMARY"
+          else
+            : "${EXPECTED_CERT:?Set ANDROID_SIGNER_SHA256 to the installed app certificate fingerprint}"
+            umask 077
+            keyfile=$(mktemp "$RUNNER_TEMP/lemon-key.XXXXXX")
+            trap 'rm -f "$keyfile"' EXIT
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$keyfile"
+            signed=dist/lemon-classroom-0.7.0.apk
+            "$build_tools/apksigner" sign --ks "$keyfile" --ks-key-alias "$KEY_ALIAS" --ks-pass env:STORE_PASS --key-pass env:KEY_PASS --out "$signed" "$apk"
+            cert=$("$build_tools/apksigner" verify --verbose --print-certs "$signed" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            expected=$(printf '%s' "$EXPECTED_CERT" | tr -d ':[:space:]' | tr 'A-F' 'a-f')
+            [[ -n "$cert" && "$cert" == "$expected" ]]
+            echo "artifact=lemon-classroom-release" >> "$GITHUB_OUTPUT"
+          fi
           sha256sum dist/*.apk > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: bilipure-apk
-          path: dist/*
+          name: ${{ steps.prepare.outputs.artifact }}
+          path: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
